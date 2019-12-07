@@ -1,0 +1,229 @@
+---
+title: "RFM Analysis & Scoring | DataSciKit.com"
+output:
+  html_document:
+    df_print: tibble
+    highlight: espresso
+    theme: readable
+    toc: yes
+  pdf_document: default
+  word_document:
+    toc: yes
+---
+
+*This work was created by Murat SAHIN on 15.10.2018. | (admin@datascikit.com)*
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+# 1 RFM : [R]ecency [F]requency [M]onetary
+
+## 1.1 What is RFM Analysis
+
+RFM (recency, frequency, monetary) analysis is a marketing technique used to determine quantitatively which customers are the best ones by examining how recently a customer has purchased (recency), how often they purchase (frequency), and how much the customer spends (monetary). RFM analysis is based on the marketing axiom that “80% of your business comes from 20% of your customers.”
+
+You can click to review more info *https://searchdatamanagement.techtarget.com/definition/RFM-analysis*
+
+
+![*RFM Scoring & Analysis Image*](1.png)
+
+
+# 2 An RFM Analysis
+
+## 2.1 About Our Dataset
+
+The file CDNOW_sample.txt contains the purchasing data for a 1/10th systematic sample of the CDNOW dataset originally used by Fader and Hardie (2001). The master dataset contains the entire purchase history up to the end of June 1998 of the cohort of 23,570 individuals who made their first-ever purchase at CDNOW in the first quarter of 1997.
+
+Each record in this file, 6919 in total, comprises five fields: the customer’s ID in the master dataset, the customer’s ID in the 1/10th sample dataset (ranging from 1 to 2357), the date of the transaction, the number of CDs purchased, and the dollar value of the transaction.
+
+Reference: Fader, Peter S. and Bruce G.,S. Hardie, (2001), “Forecasting Repeat Sales at CDNOW: A Case Study,” Interfaces, 31 (May-June), Part 2 of 2, S94-S107.
+
+## 2.2 Import Dataset
+
+
+```{r}
+library(readr)
+dataFrame <- read.table("CDNOW_sample.txt")
+
+```
+
+Now it’s included. We can study on our dataframe.
+
+```{r}
+head(dataFrame)
+```
+In order to have an idea, we do coding this way.
+
+```{r}
+str(dataFrame)
+```
+
+
+```{r}
+summary(dataFrame)
+```
+## 2.3 Feature Engineering
+
+We don’t need V1 column, then i removed.
+```{r}
+dataFrame$V1 <- NULL
+```
+
+If we create columns names, it would be more convenient.
+
+```{r}
+colnames(dataFrame) <- c("customerID","Date","Amount","Price")
+```
+Some required conversion operations…
+
+```{r}
+
+dataFrame$customerID <- as.factor(as.character(dataFrame$customerID))
+
+is.factor(dataFrame$customerID)
+```
+
+
+```{r}
+dataFrame$Date = as.Date(as.character(dataFrame$Date), "%Y%m%d")
+
+str(dataFrame)
+```
+
+
+```{r}
+Sys.Date() # It's gives todays date.
+```
+
+
+```{r}
+referenceDay = max(dataFrame$Date) # Max function gives last day.
+
+```
+Our last day is reference day.
+
+```{r}
+referenceDay
+```
+
+We should find Recency.
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+
+rfm_recency <- dataFrame %>% group_by(customerID) %>% 
+  summarise(Recency = as.numeric(referenceDay) - as.numeric(max(Date)))
+```
+
+We should find Frequency.
+```{r}
+rfm_frequency <- dataFrame %>% group_by(customerID) %>% summarise(Frequency = n())
+```
+
+We should find Monetary.
+```{r}
+rfm_monetary <- dataFrame %>% group_by(customerID) %>% summarise(Monetary = sum(Price))
+```
+And merge three columns.
+
+```{r}
+rfm <- merge(rfm_recency, rfm_frequency, by="customerID")
+
+rfm <- merge(rfm, rfm_monetary, by="customerID")
+```
+
+Good job, now we continue to clearer analysis.
+
+To know distribution, we use quantile function.
+
+```{r}
+quantile(rfm$Monetary)
+```
+
+Creates rankMonetary columns.
+```{r}
+rankMonetary <- cut(rfm$Monetary, breaks=c(0,20,45,105,1000,6600))
+
+levels(rankMonetary)
+```
+We evaluate Monetary score.
+
+```{r}
+levels(rankMonetary) <- c(1,2,3,4,5)
+levels(rankMonetary)
+```
+To know distribution, we use quantile function.
+
+```{r}
+quantile(rfm$Recency)
+```
+
+
+```{r}
+rankRecency <- cut(rfm$Recency, breaks=c(0,60,220,473,506,550))
+```
+
+Creates rankRecency columns.
+```{r}
+levels(rankRecency) <- c(5,4,3,2,1)
+
+levels(rankRecency)
+```
+We evaluate Recency score.
+
+To know distribution, we use quantile function.
+
+```{r}
+quantile(rfm$Frequency)
+```
+
+
+```{r}
+rankFrequency <- cut(rfm$Frequency, breaks=c(0,1,2,3,7,60))
+```
+Creates rankFrequency columns.
+
+```{r}
+levels(rankFrequency) <- c(1,2,3,4,5)
+
+levels(rankFrequency)
+```
+
+We evaluate Frequency score.
+
+Almost done.
+
+We’re creating current Dataframe.
+```{r}
+rfmScores <- data.frame(cbind(rfm$customerID, rankRecency, rankFrequency, rankMonetary))
+
+colnames(rfmScores) <- c("customerID","rankRecency","rankFrequency","rankMonetary")
+```
+Let’s see what happened.
+
+```{r}
+head(rfmScores)
+```
+
+# 3 Conclusion
+
+For example, we will examine one of the customer. Let’s say, we need detailed information about 51th customer.
+```{r}
+
+rfmScores[rfmScores$customerID == 51,]
+
+```
+
+Yes, let’s examining. This customer has 4 point about rankRecency. It’s so this customer has been shopping recently. This means customer is still our customer. What about other Ranks?
+
+rankFrequency has 1 point. This means, this customer our new customer. I think new customer want to attend new campaign, why not. New customer is suppose to be more shopping.
+
+rankMonetary has 1 point. This means, maybe customer is poor. Maybe customer is stingy, who knows? We never know, but we can create closest guess. Thanks to R Studio and RFM Scoring.
+
+Thank's for your patient. If you have a question or offer please tell me, i will be happy to hear it. You can send mail to __admin@datascikit.org__ or __muratpq@gmail.com __
+
+*This html page has been created by R Studio.*
